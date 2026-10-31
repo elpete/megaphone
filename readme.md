@@ -589,3 +589,13 @@ WireBox names such as `NotificationPlan@megaphone` and `WebPushRuntime@megaphone
 ### Named email digests
 
 Collect notifications through `EmailDigestProvider@megaphone` into independent named subscriptions and schedules. `EmailDigestService@megaphone` freezes due batches and sends them through a receipt-aware email channel. Collection, email acceptance, and uncertain sends remain separate states. See [Named email digests](docs/email-digests.md) for configuration, policies, scheduler integration, and per-digest unsubscribe.
+
+### Scheduler ownership
+
+Set `moduleSettings.megaphone.schedulerEnabled = false` on web-only processes
+(or processes bootstrapped under a maintenance fence). The default is `true`.
+Disabling it skips module timer registration and startup schedule refresh without
+removing digest definitions or disabling request-side notification publication.
+Keep it enabled on the process that owns business schedules. Changing this
+startup setting requires restarting/reinitializing that process; it is not an
+in-flight job cancellation mechanism.

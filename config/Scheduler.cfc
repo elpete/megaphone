@@ -2,6 +2,9 @@
 component {
 
     function configure() {
+        if ( !schedulerEnabled() ) {
+            return;
+        }
         // Module schedulers are configured before ModuleConfig.onLoad maps configured stores.
         task( "emailDigest-deliveries" )
             .call( () => {
@@ -18,6 +21,9 @@ component {
     }
 
     function onStartup() {
+        if ( !schedulerEnabled() ) {
+            return;
+        }
         var digests = getInstance( "EmailDigestService@megaphone" );
         digests.useScheduler( this );
         if ( !structIsEmpty( getModuleSettings( "megaphone" ).digests ?: {} ) ) {
@@ -27,6 +33,11 @@ component {
 
     function onAnyTaskError( required task, required exception ) {
         variables.log.error( "Email digest task [#arguments.task.getName()#] failed", arguments.exception );
+    }
+
+    private boolean function schedulerEnabled() {
+        var settings = getModuleSettings( "megaphone" );
+        return !structKeyExists( settings, "schedulerEnabled" ) || settings.schedulerEnabled;
     }
 
 }
