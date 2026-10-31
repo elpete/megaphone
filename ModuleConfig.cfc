@@ -17,6 +17,7 @@ component {
                 "digests": {}
             },
             "digests": {},
+            "schedulerEnabled": true,
             "queue": {
                 "queueAdapter": "CBQNotificationQueue@megaphone",
                 "defaultConnection": "",
