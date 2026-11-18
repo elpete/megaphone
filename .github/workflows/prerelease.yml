@@ -73,7 +73,6 @@ jobs:
           box install ${{ matrix.coldbox }} --noSave
           if [[ "${{ matrix.engine.cfengine }}" == boxlang* ]]; then
             box install testbox@6 --noSave
-            box install qb@14 --noSave
             box install cbq@7 --noSave
             box install hyper@8 --noSave
           fi

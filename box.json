@@ -28,7 +28,7 @@
     },
     "type":"modules",
     "dependencies":{
-        "qb":"^9.4.0",
+        "qb":"^14.2.0",
         "str":"^3.0.1",
         "zerodep-web-push-java":"jar:https://repo.maven.apache.org/maven2/com/zerodeplibs/zerodep-web-push-java/2.1.5/zerodep-web-push-java-2.1.5.jar"
     },

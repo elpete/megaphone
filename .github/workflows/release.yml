@@ -74,7 +74,6 @@ jobs:
           bash .github/scripts/box-install.sh ${{ matrix.coldbox }} --noSave
           if [[ "${{ matrix.engine.cfengine }}" == boxlang* ]]; then
             bash .github/scripts/box-install.sh testbox@6 --noSave
-            bash .github/scripts/box-install.sh qb@14 --noSave
             bash .github/scripts/box-install.sh cbq@7 --noSave
             bash .github/scripts/box-install.sh hyper@8 --noSave
           fi
