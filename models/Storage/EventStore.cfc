@@ -129,6 +129,25 @@ component accessors="true" {
         return result;
     }
 
+    /** Typed stock row for a fresh source whose caller owns a single-statement aggregate insert. */
+    public struct function newSourceInsert( required struct event, required any hasher ) {
+        var builder = newEventQuery();
+        var preparation = structCopy( arguments.event );
+        preparation.preparation = {
+            "references": true,
+            "hashExpression": arguments.hasher.digestExpression(
+                builder,
+                arguments.event.payload,
+                { "namespace": arguments.event.namespace, "kind": "payload" }
+            )
+        };
+        return {
+            "name": "megaphone_new_event",
+            "builder": builder,
+            "values": [ prepareEvent( argumentCollection = preparation ).values ]
+        };
+    }
+
     private struct function prepareEvent(
         required string namespace,
         required string eventKey,
@@ -142,7 +161,9 @@ component accessors="true" {
     ) {
         if (
             !len( trim( arguments.namespace ) ) || !len( trim( arguments.eventKey ) ) ||
-            !len( trim( arguments.type ) ) || !len( trim( arguments.payloadHash ) ) ||
+            !len( trim( arguments.type ) ) || (
+                !arguments.preparation.keyExists( "hashExpression" ) && !len( trim( arguments.payloadHash ) )
+            ) ||
             arguments.version < 1 || fix( arguments.version ) != arguments.version
         ) {
             throw(
@@ -159,7 +180,7 @@ component accessors="true" {
         values.append( {
             "id": variables.uuidGenerator.randomUUID().toString(),
             "type": arguments.type,
-            "payloadHash": arguments.payloadHash,
+            "payloadHash": arguments.preparation.hashExpression ?: arguments.payloadHash,
             "payload": serializeJSON( arguments.payload ),
             "createdDate": arguments.createdDate,
             "notificationMapping": {

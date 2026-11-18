@@ -172,6 +172,51 @@ component accessors="true" {
         return result;
     }
 
+    /** Reuse the normal identity, timestamp, suppression and typed-binding rules for fresh source writes. */
+    public struct function newSourceInsert( required string eventId, required struct capture, required any hasher ) {
+        var builder = newDeliveryQuery();
+        var rows = [];
+        var references = [];
+        var auditClock = now();
+        for ( var intent in arguments.capture.deliveries ) {
+            var row = prepareDelivery(
+                eventId = arguments.eventId,
+                recipientType = intent.notifiableType,
+                recipientId = intent.notifiableId,
+                channel = intent.channelName,
+                deviceId = intent.deviceId,
+                routingData = intent.routingData,
+                routingHash = "",
+                initialState = intent.enabled ? "queued" : "suppressed",
+                availableDate = intent.availableDate,
+                preparation = {
+                    "references": true,
+                    "auditClock": auditClock,
+                    "hashExpression": arguments.hasher.digestExpression(
+                        builder,
+                        intent.routingData,
+                        { "namespace": arguments.capture.event.namespace, "kind": "routing" }
+                    )
+                }
+            ).values;
+            rows.append( row );
+            if ( row.state == "queued" ) {
+                references.append( {
+                    "id": row.id,
+                    "state": row.state,
+                    "availableDate": row.availableDate,
+                    "created": true
+                } );
+            }
+        }
+        return {
+            "name": "megaphone_new_deliveries",
+            "builder": builder,
+            "values": rows,
+            "references": references
+        };
+    }
+
     private struct function prepareDelivery(
         required string eventId,
         required string recipientType,
@@ -187,7 +232,10 @@ component accessors="true" {
         if (
             !len( trim( arguments.eventId ) ) || !len( trim( arguments.recipientType ) ) ||
             !len( trim( arguments.recipientId ) ) || !len( trim( arguments.channel ) ) ||
-            !len( trim( arguments.routingHash ) ) || !listFind( "queued,suppressed", arguments.initialState )
+            ( !arguments.preparation.keyExists( "hashExpression" ) && !len( trim( arguments.routingHash ) ) ) || !listFind(
+                "queued,suppressed",
+                arguments.initialState
+            )
         ) {
             throw(
                 type = "Megaphone.Delivery.InvalidIntent",
@@ -205,7 +253,7 @@ component accessors="true" {
         values.deviceId = textBinding( arguments.deviceId );
         values.append( {
             "id": uuid(),
-            "routingHash": arguments.routingHash,
+            "routingHash": arguments.preparation.hashExpression ?: arguments.routingHash,
             "routingData": serializeJSON( arguments.routingData ),
             "state": arguments.initialState,
             "attemptCount": 0,
