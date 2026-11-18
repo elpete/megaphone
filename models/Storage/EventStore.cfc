@@ -129,6 +129,13 @@ component accessors="true" {
         return result;
     }
 
+    /** Older qb builders drop expression bindings when compiling an insert. Compile a probe without executing it. */
+    public boolean function supportsBoundSourceInserts() {
+        var builder = newEventQuery();
+        builder.insert( values = { "payloadHash": builder.raw( "?", [ "megaphone-source-probe" ] ) }, toSql = true );
+        return builder.getBindings().len() == 1;
+    }
+
     /** Typed stock row for a fresh source whose caller owns a single-statement aggregate insert. */
     public struct function newSourceInsert( required struct event, required any hasher ) {
         var builder = newEventQuery();

@@ -341,7 +341,8 @@ component singleton accessors="true" {
         !isNull( hasher ) && isCustomFunction( hasher.digestExpression ?: "" ) &&
         stock.isStockComponent( eventStore, "megaphone.models.Storage.EventStore" ) &&
         stock.isStockComponent( deliveryStore, "megaphone.models.Storage.DeliveryStore" ) &&
-        eventStore.getQueryOptions().isEmpty() && deliveryStore.getQueryOptions().isEmpty();
+        eventStore.getQueryOptions().isEmpty() && deliveryStore.getQueryOptions().isEmpty() &&
+        eventStore.supportsBoundSourceInserts();
         transaction {
             try {
                 if ( !compose ) {

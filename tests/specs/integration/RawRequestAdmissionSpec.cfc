@@ -20,25 +20,32 @@ component extends="tests.resources.BulkNotificationSpecBase" {
                     }
                 }
             } );
-            it( "writes a fresh source's event and delivery rows before dispatch and preserves ordinary replay", () => {
+            it( "admits a fresh source through the supported writer and preserves ordinary replay", () => {
                 var canonical = new megaphone.models.Delivery.NotificationSnapshotHasher();
                 variables.config.queue.snapshotHasher = {
                     "digest": ( value, context ) => canonical.digest( value ),
                     "digestExpression": ( builder, value, context ) => builder.raw( "?", [ canonical.digest( value ) ] )
                 };
                 var input = notificationRequest( createUUID() );
+                var composed = variables.events.supportsBoundSourceInserts();
                 var captured = [];
                 variables.service.admitWithNewSource( input, ( writes ) => {
-                    expect( writes.len() ).toBe( 2 );
+                    expect( writes.len() ).toBe( composed ? 2 : 0 );
                     expect( variables.adapter.getReferences().isEmpty() ).toBeTrue();
                     for ( var write in writes ) {
                         write.builder.insert( write.values );
                     }
-                    captured.append( writes[ 1 ].values[ 1 ].id );
+                    if ( composed ) {
+                        captured.append( writes[ 1 ].values[ 1 ].id );
+                    }
                 } );
-                expect( variables.events.find( captured[ 1 ] ).eventKey ).toBe( input.options.eventKey );
-                expect( variables.deliveries.forEvent( captured[ 1 ] ).len() ).toBe( 3 );
                 expect( variables.adapter.getReferences().len() ).toBe( 2 );
+                var eventId = variables.deliveries.find( variables.adapter.getReferences()[ 1 ].id ).eventId;
+                if ( composed ) {
+                    expect( eventId ).toBe( captured[ 1 ] );
+                }
+                expect( variables.events.find( eventId ).eventKey ).toBe( input.options.eventKey );
+                expect( variables.deliveries.forEvent( eventId ).len() ).toBe( 3 );
                 variables.service.admitRequests( [ input ] );
                 expect( variables.adapter.getReferences().len() ).toBe( 2 );
             } );
@@ -47,10 +54,25 @@ component extends="tests.resources.BulkNotificationSpecBase" {
                 variables.config.queue.snapshotHasher = {
                     "digestExpression": ( builder, value, context ) => builder.raw( "?", [ canonical.digest( value ) ] )
                 };
+                var input = notificationRequest( createUUID() );
+                var composed = variables.events.supportsBoundSourceInserts();
                 var captured = [];
-                expect( () => variables.service.admitWithNewSource( notificationRequest( createUUID() ), ( writes ) => {
-                    captured.append( writes[ 1 ].values[ 1 ].id );
-                    writes[ 1 ].builder.insert( writes[ 1 ].values );
+                expect( () => variables.service.admitWithNewSource( input, ( writes ) => {
+                    expect( writes.len() ).toBe( composed ? 2 : 0 );
+                    if ( composed ) {
+                        captured.append( writes[ 1 ].values[ 1 ].id );
+                        writes[ 1 ].builder.insert( writes[ 1 ].values );
+                    } else {
+                        var source = variables.events.record(
+                            namespace = input.options.namespace,
+                            eventKey = input.options.eventKey,
+                            version = input.options.version,
+                            type = "source-test",
+                            payload = {},
+                            payloadHash = canonical.digest( {} )
+                        );
+                        captured.append( source.id );
+                    }
                     throw( type = "Test.SourceWriteFailure" );
                 } ) ).toThrow( type = "Test.SourceWriteFailure" );
                 expect( isNull( variables.events.find( captured[ 1 ] ) ) ).toBeTrue();
