@@ -325,6 +325,63 @@ component singleton accessors="true" {
         admitCaptures( argumentCollection = admissionArguments );
     }
 
+    /**
+     * Admit an event owned by a newly inserted, unique source. The source callback must run every supplied
+     * qb insert with its own insert in this transaction. Existing/replayable sources use admitRequests().
+     * The configured hasher may supply an equivalent database expression for each immutable snapshot.
+     */
+    public void function admitWithNewSource( required struct publication, required function insertSource ) {
+        var runtime = newNotificationRuntime();
+        var adapter = runtime.resolve( "queueAdapter" );
+        var hasher = runtime.resolve( "snapshotHasher" );
+        var eventStore = newEventStore();
+        var deliveryStore = newDeliveryStore();
+        var stock = new megaphone.models.Storage.StockReferenceRecords();
+        var compose = !isNull( adapter ) && isCustomFunction( adapter.enqueueReferencesMany ?: "" ) &&
+        !isNull( hasher ) && isCustomFunction( hasher.digestExpression ?: "" ) &&
+        stock.isStockComponent( eventStore, "megaphone.models.Storage.EventStore" ) &&
+        stock.isStockComponent( deliveryStore, "megaphone.models.Storage.DeliveryStore" ) &&
+        eventStore.getQueryOptions().isEmpty() && deliveryStore.getQueryOptions().isEmpty();
+        transaction {
+            try {
+                if ( !compose ) {
+                    arguments.insertSource( [] );
+                    admitRequests( [ arguments.publication ] );
+                    return;
+                }
+                var input = structCopy( arguments.publication );
+                input.deferHashes = true;
+                var captured = captureArguments( argumentCollection = input );
+                if ( captured.event.expired ?: false ) {
+                    arguments.insertSource( [] );
+                    return;
+                }
+                if (
+                    captured.deliveries.some( ( intent ) => ( intent.collection ?: false ) || structKeyExists( intent.routingData, "emailDigest" ) )
+                ) {
+                    arguments.insertSource( [] );
+                    admitRequests( [ arguments.publication ] );
+                    return;
+                }
+                var eventWrite = eventStore.newSourceInsert( captured.event, hasher );
+                var deliveryWrite = deliveryStore.newSourceInsert( eventWrite.values[ 1 ].id, captured, hasher );
+                var writes = [ eventWrite ];
+                if ( deliveryWrite.values.len() ) {
+                    writes.append( deliveryWrite );
+                }
+                arguments.insertSource( writes );
+                if ( deliveryWrite.references.len() ) {
+                    var options = structCopy( captured.queueOptions );
+                    options.references = deliveryWrite.references;
+                    adapter.enqueueReferencesMany( argumentCollection = options );
+                }
+            } catch ( any error ) {
+                transactionRollback();
+                rethrow;
+            }
+        }
+    }
+
     private void function hashCaptures( required array captures ) {
         var hashes = [];
         for ( var captured in arguments.captures ) {

@@ -20,6 +20,42 @@ component extends="tests.resources.BulkNotificationSpecBase" {
                     }
                 }
             } );
+            it( "writes a fresh source's event and delivery rows before dispatch and preserves ordinary replay", () => {
+                var canonical = new megaphone.models.Delivery.NotificationSnapshotHasher();
+                variables.config.queue.snapshotHasher = {
+                    "digest": ( value, context ) => canonical.digest( value ),
+                    "digestExpression": ( builder, value, context ) => builder.raw( "?", [ canonical.digest( value ) ] )
+                };
+                var input = notificationRequest( createUUID() );
+                var captured = [];
+                variables.service.admitWithNewSource( input, ( writes ) => {
+                    expect( writes.len() ).toBe( 2 );
+                    expect( variables.adapter.getReferences().isEmpty() ).toBeTrue();
+                    for ( var write in writes ) {
+                        write.builder.insert( write.values );
+                    }
+                    captured.append( writes[ 1 ].values[ 1 ].id );
+                } );
+                expect( variables.events.find( captured[ 1 ] ).eventKey ).toBe( input.options.eventKey );
+                expect( variables.deliveries.forEvent( captured[ 1 ] ).len() ).toBe( 3 );
+                expect( variables.adapter.getReferences().len() ).toBe( 2 );
+                variables.service.admitRequests( [ input ] );
+                expect( variables.adapter.getReferences().len() ).toBe( 2 );
+            } );
+            it( "rolls back a source-owned event when the composition callback fails", () => {
+                var canonical = new megaphone.models.Delivery.NotificationSnapshotHasher();
+                variables.config.queue.snapshotHasher = {
+                    "digestExpression": ( builder, value, context ) => builder.raw( "?", [ canonical.digest( value ) ] )
+                };
+                var captured = [];
+                expect( () => variables.service.admitWithNewSource( notificationRequest( createUUID() ), ( writes ) => {
+                    captured.append( writes[ 1 ].values[ 1 ].id );
+                    writes[ 1 ].builder.insert( writes[ 1 ].values );
+                    throw( type = "Test.SourceWriteFailure" );
+                } ) ).toThrow( type = "Test.SourceWriteFailure" );
+                expect( isNull( variables.events.find( captured[ 1 ] ) ) ).toBeTrue();
+                expect( variables.adapter.getReferences().isEmpty() ).toBeTrue();
+            } );
             it( "admits 101 requests without any mapped Plan or result models and freezes replay choices", () => {
                 guardModels();
                 var inputs = [];
